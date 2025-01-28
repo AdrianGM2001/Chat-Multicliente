@@ -94,7 +94,7 @@ public class EscuchaHilo extends Thread {
      */
     private void recibirPrivado(String parametros) {
         String[] splitParametros = parametros.split(" ", 2);
-        Platform.runLater(() -> clienteController.recibirMensaje(String.format("[PRIVADO] %s: %s", splitParametros[0], splitParametros[1])));
+        Platform.runLater(() -> clienteController.recibirPrivado(splitParametros[0], splitParametros[1]));
         System.out.printf("Mensaje privado de %s: %s%n", splitParametros[0], splitParametros[1]);
     }
 
@@ -104,7 +104,7 @@ public class EscuchaHilo extends Thread {
      */
     private void recibirGeneral(String parametros) {
         String[] splitParametros = parametros.split(" ", 2);
-        Platform.runLater(() -> clienteController.recibirMensaje(String.format("%s: %s", splitParametros[0], splitParametros[1])));
+        Platform.runLater(() -> clienteController.recibirGeneral(splitParametros[0], splitParametros[1]));
         System.out.printf("Mensaje de %s: %s%n", splitParametros[0], splitParametros[1]);
     }
 

@@ -33,6 +33,7 @@ import es.chat.modelo.comando.ServCmd;
 public class ClienteController implements Initializable {
     private Socket socketCliente;
     private DataOutputStream salida;
+    private String aliasReceptorPrivado;
 
     @FXML
     private TextField aliasIntroducido;
@@ -201,11 +202,28 @@ public class ClienteController implements Initializable {
     }
 
     /**
-     * Recibe un mensaje del servidor y lo muestra en la interfaz gráfica.
-     * @param mensaje Mensaje recibido del servidor.
+     * Recibe un mensaje general y lo muestra en la interfaz gráfica.
+     * @param alias Alias del usuario que envía el mensaje.
+     * @param mensaje Mensaje recibido.
      */
-    public void recibirMensaje(String mensaje) {
-        mensajes.appendText(mensaje + "\n");
+    public void recibirGeneral(String alias, String mensaje) {
+        if (alias.equals(aliasIntroducido.getText())) {
+            alias = "Yo";
+        }
+        mensajes.appendText(String.format("%s: %s%n", alias, mensaje));
+    }
+
+    /**
+     * Recibe un mensaje privado y lo muestra en la interfaz gráfica.
+     * @param alias Alias del usuario que envía el mensaje.
+     * @param mensaje Mensaje recibido.
+     */
+    public void recibirPrivado(String alias, String mensaje) {
+        boolean enviado = alias.equals(aliasIntroducido.getText());
+        mensajes.appendText(String.format("[PRIVADO] %s %s: %s%n", 
+            enviado ? "Enviado a" : "Recibido de", 
+            enviado ? aliasReceptorPrivado : alias, 
+            mensaje));
     }
 
     /**
@@ -213,9 +231,11 @@ public class ClienteController implements Initializable {
      * @param alias Alias del usuario al que se quiere enviar un mensaje privado.
      */
     private void onUsuarioClick(String alias) {
-        if (alias.equals(aliasIntroducido.getText())) {
+        if (alias == null || alias.equals(aliasIntroducido.getText())) {
             return;
         }
+
+        aliasReceptorPrivado = alias;
 
         TextField mensaje = new TextField();
         mensaje.setPromptText("Escribe tu mensaje...");
@@ -234,7 +254,7 @@ public class ClienteController implements Initializable {
         alert.getDialogPane().setStyle("-fx-background-color: #00447c;");
         alert.getButtonTypes().forEach(bt -> alert.getDialogPane().lookupButton(bt).setStyle("-fx-background-color: #969bb9; -fx-text-fill: white;"));
         alert.showAndWait().ifPresent(bt -> {
-            if (bt == enviar) {
+            if (bt == enviar && !mensaje.getText().isBlank()) {
                 try {
                     salida.writeUTF(String.format("%s %s %s", CliCmd.PRV, alias, mensaje.getText()));
                 } catch (IOException e) {
