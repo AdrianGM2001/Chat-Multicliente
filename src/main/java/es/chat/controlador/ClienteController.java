@@ -13,12 +13,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.URL;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.ResourceBundle;
+import java.util.*;
 
+import es.chat.modelo.Chat;
 import es.chat.modelo.comando.CliCmd;
 import es.chat.modelo.comando.ServCmd;
 
@@ -27,6 +24,7 @@ import es.chat.modelo.comando.ServCmd;
  * Inicia el hilo de escucha de mensajes del servidor y envía mensajes al servidor.
  * @see EscuchaHilo
  * @see Cliente
+ * @see Chat
  * @see CliCmd
  * @version 1.0
  * @author Adrián González
@@ -34,13 +32,14 @@ import es.chat.modelo.comando.ServCmd;
 public class ClienteController implements Initializable {
     private Socket socketCliente;
     private DataOutputStream salida;
-    private Map<String, String> chats;
-    private String aliasChatActual;
+    private List<Chat> chats;
     /**
-     * Indica si se puede cambiar de chat. Esto es necesario ya que el servidor envía como respuesta a un mensaje privado
-     * el alias del emisor y el mensaje enviado, por lo que se debe evitar cambiar de chat tras el envío de un mensaje y no 
-     * haber recibido la respuesta del servidor, ya que de esta manera se asegura que se muestre en el chat desde el que ha 
-     * sido enviado.
+     * Chat abierto en la interfaz. Se inicializa con el chat general.
+     */
+    private Chat chatActual;
+    /**
+     * Indica si se puede cambiar de chat. Se pone a false al enviar un mensaje privado para evitar cambiar de chat,
+     * ya que se espera a recibir un mensaje privado de vuelta y escribirlo en el mismo chat.
      */
     private boolean puedeCambiarChat = true;
 
@@ -60,10 +59,7 @@ public class ClienteController implements Initializable {
     private Label labelChatActual;
 
     @FXML
-    private Button botGeneral;
-
-    @FXML
-    private ListView<String> listaUsuarios;
+    private ListView<Chat> chatsListView;
 
     @FXML
     private TextArea mensajes;
@@ -80,7 +76,7 @@ public class ClienteController implements Initializable {
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
         chat.setVisible(false);
-        listaUsuarios.setOnMouseClicked(event -> onUsuarioClick(listaUsuarios.getSelectionModel().getSelectedItem()));
+        chatsListView.setOnMouseClicked(event -> onUsuarioClick(chatsListView.getSelectionModel().getSelectedItem()));
     }
 
     /**
@@ -133,18 +129,19 @@ public class ClienteController implements Initializable {
      * @param mensaje Mensaje a mostrar en la interfaz gráfica.
      */
     public void recibirOK(String mensaje) {
+        cambiarEstado(ServCmd.OK, mensaje);
+
         try {
             salida.writeUTF(CliCmd.LUS.name());
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
 
-        cambiarEstado(ServCmd.OK, mensaje);
-        chats = new HashMap<>();
-        chats.put("_General", "");
-        aliasChatActual = "_General";
+        // Inicializar lista de chats
+        chatActual = new Chat("[General]");
+        chats = new ArrayList<>();
+        chats.add(chatActual);
         labelChatActual.setText("Chat general");
-        botGeneral.setVisible(false);
         puedeCambiarChat = true;
     }
 
@@ -177,47 +174,51 @@ public class ClienteController implements Initializable {
      * @param listaSeparadaPorComas Lista de usuarios separados por comas.
      */
     public void recibirUsuarios(String listaSeparadaPorComas) {
-        List<String> lista = Arrays.asList(listaSeparadaPorComas.split(","));
-        listaUsuarios.getItems().clear();
-        listaUsuarios.getItems().addAll(lista);
-        listaUsuarios.getItems().forEach(usuario -> chats.put(usuario, ""));
+        Arrays.stream(listaSeparadaPorComas.split(","))
+                .filter(c -> !c.equals(aliasIntroducido.getText()))
+                .map(Chat::new)
+                .forEach(chats::add);
+        chatsListView.getItems().addAll(chats);
     }
 
     /**
      * Añade un nuevo usuario a la lista de usuarios. Si el usuario ya estuvo conectado, añade un mensaje de reconexión al chat.
-     * @param usuario Usuario a añadir a la lista de usuarios.
+     * @param alias Usuario a añadir a la lista de usuarios.
      */
-    public void addNuevoUsuario(String usuario) {
-        listaUsuarios.getItems().add(usuario);
+    public void addNuevoUsuario(String alias) {
+        Chat nuevoChat = chats.stream()
+                .filter(u -> u.getAlias().equals(alias))
+                .findFirst()
+                .orElse(new Chat(alias));
 
-        if (!chats.containsKey(usuario)) {
-            chats.put(usuario, "");
-            return;
-        }
+        nuevoChat.addMensaje(String.format("%s se ha conectado.", alias));
+        chatsListView.getItems().add(nuevoChat);
+    }
 
-        chats.put(usuario, chats.get(usuario) + String.format("%s se ha reconectado.%n", usuario));
+    /**
+     * Elimina un usuario del ListView de usuarios, pero no de la lista de chats (en caso de que el usuario vuelva a conectarse,
+     * se podrán ver los mensajes anteriores, pero solo el usuario actual).
+     * @param alias Usuario a eliminar del ListView de usuarios.
+     */
+    public void deleteUsuario(String alias) {
+        Chat aEliminar = chats.stream()
+            .filter(c -> c.getAlias().equals(alias))
+            .findFirst()
+            .orElseThrow();
 
-        if (aliasChatActual.equals(usuario)) {
-            mensajes.setText(chats.get(usuario));
+        chatsListView.getItems().remove(aEliminar);
+
+        aEliminar.addMensaje(String.format("%s se ha desconectado.", alias));
+
+        if (chatActual.equals(aEliminar)) {
+            chatActual = chats.getFirst();
+            mensajes.setText(chatActual.getMensajes());
         }
     }
 
     /**
-     * Elimina un usuario de la lista de usuarios.
-     * @param usuario Usuario a eliminar de la lista de usuarios.
-     */
-    public void deleteUsuario(String usuario) {
-        listaUsuarios.getItems().remove(usuario);
-
-        chats.put(usuario, chats.get(usuario) + String.format("%s se ha desconectado.%n", usuario));
-
-        if (aliasChatActual.equals(usuario)) {
-            mensajes.setText(chats.get(usuario));
-        }
-    }
-
-    /**
-     * Envía un mensaje al servidor para desconectarse y cierra la conexión con el servidor.
+     * Envía un mensaje al servidor para desconectarse y cierra la conexión con el servidor. Limpia
+     * el ListView de chats, la lista de chats y el chat actual.
      */
     @FXML
     private void onDesconectarClick() {
@@ -226,6 +227,9 @@ public class ClienteController implements Initializable {
             Cliente.hiloEscucha.interrupt();
             socketCliente.close();
             mensajes.clear();
+            chats.clear();
+            chatsListView.getItems().clear();
+            chatActual = null;
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
@@ -244,10 +248,10 @@ public class ClienteController implements Initializable {
             return;
         }
 
-        if (aliasChatActual.equals("_General")) {
+        if (chatActual.getAlias().equals("[General]")) {
             mensaje = String.format("%s %s", CliCmd.MSG, mensajeIntroducido.getText());
         } else {
-            mensaje = String.format("%s %s %s", CliCmd.PRV, aliasChatActual, mensajeIntroducido.getText());
+            mensaje = String.format("%s %s %s", CliCmd.PRV, chatActual.getAlias(), mensajeIntroducido.getText());
             puedeCambiarChat = false;
         }
 
@@ -260,35 +264,25 @@ public class ClienteController implements Initializable {
     }
 
     /**
-     * Muestra el chat general al hacer click en el botón de chat general. Si no se puede cambiar de chat, no hace nada.
-     */
-    @FXML
-    private void onGeneralClick() {
-        if (!puedeCambiarChat) {
-            return;
-        }
-
-        aliasChatActual = "_General";
-        labelChatActual.setText("Chat general");
-        mensajes.setText(chats.get(aliasChatActual));
-        botGeneral.setVisible(false);
-    }
-
-    /**
      * Recibe un mensaje general y lo muestra en la interfaz gráfica.
      * @param alias Alias del usuario que envía el mensaje.
      * @param mensaje Mensaje recibido.
      */
     public void recibirGeneral(String alias, String mensaje) {
+        Chat chatGeneral = chats.getFirst(); // El chat general siempre está en la primera posición
         if (alias.equals(aliasIntroducido.getText())) {
             alias = "Yo";
         }
 
-        chats.put("_General", chats.get("_General") + String.format("%s: %s%n", alias, mensaje));
+        chatGeneral.addMensaje(String.format("%s: %s", alias, mensaje));
+        chatGeneral.incrementarMensajesNoLeidos();
 
-        if (aliasChatActual.equals("_General")) {
-            mensajes.setText(chats.get("_General"));
+        if (chatActual.getAlias().equals("[General]")) {
+            mensajes.setText(chatActual.getMensajes());
+            chatActual.resetMensajesNoLeidos();
         }
+
+        chatsListView.refresh();
     }
 
     /**
@@ -297,32 +291,51 @@ public class ClienteController implements Initializable {
      * @param mensaje Mensaje recibido.
      */
     public void recibirPrivado(String alias, String mensaje) {
-        if (alias.equals(aliasIntroducido.getText())) {
-            chats.put(aliasChatActual, chats.get(aliasChatActual) + String.format("Yo: %s%n", mensaje));
+        Optional<Chat> aEscribir = chats.stream()
+                .filter(u -> u.getAlias().equals(alias))
+                .findFirst();
+
+        Chat aEscribirEncontrado;
+
+        if (aEscribir.isEmpty()) {
+            chatActual.addMensaje(String.format("Yo: %s", mensaje));
+            mensajes.setText(chatActual.getMensajes());
             puedeCambiarChat = true;
-            mensajes.setText(chats.get(aliasChatActual));
             return;
         }
 
-        chats.put(alias, chats.get(alias) + String.format("%s: %s%n", alias, mensaje));
+        aEscribirEncontrado = aEscribir.get();
 
-        if (aliasChatActual.equals(alias)) {
-            mensajes.setText(chats.get(alias));
+        aEscribirEncontrado.addMensaje(String.format("%s: %s", alias, mensaje));
+        aEscribirEncontrado.incrementarMensajesNoLeidos();
+
+        if (aEscribirEncontrado.equals(chatActual)) {
+            mensajes.setText(chatActual.getMensajes());
+            chatActual.resetMensajesNoLeidos();
         }
+
+        chatsListView.refresh();
     }
 
     /**
-     * Muestra el chat privado con un usuario al hacer click en la lista de usuarios.
-     * @param alias Alias del usuario al que se quiere enviar un mensaje privado.
+     * Muestra el chat con un usuario al hacer click en la lista de usuarios.
+     * @param chatSeleccionado Chat seleccionado en la lista de usuarios.
      */
-    private void onUsuarioClick(String alias) {
-        if (alias == null || alias.equals(aliasIntroducido.getText()) || !puedeCambiarChat) {
+    private void onUsuarioClick(Chat chatSeleccionado) {
+        if (chatSeleccionado == null || !puedeCambiarChat) {
             return;
         }
 
-        aliasChatActual = alias;
-        labelChatActual.setText(String.format("Chat privado con %s", alias));
-        mensajes.setText(chats.get(aliasChatActual));
-        botGeneral.setVisible(true);
+        chatActual = chatSeleccionado;
+
+        if (chatActual.getAlias().equals("[General]")) {
+            labelChatActual.setText("Chat general");
+        } else {
+            labelChatActual.setText(String.format("Chat privado con %s", chatActual.getAlias()));
+        }
+
+        chatActual.resetMensajesNoLeidos();
+        chatsListView.refresh();
+        mensajes.setText(chatActual.getMensajes());
     }
 }

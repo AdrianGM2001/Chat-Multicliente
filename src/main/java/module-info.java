@@ -2,7 +2,6 @@ module es.chat.cliente {
     requires javafx.controls;
     requires javafx.fxml;
 
-    requires org.controlsfx.controls;
     requires javafx.graphics;
 
     opens es.chat.cliente to javafx.fxml;

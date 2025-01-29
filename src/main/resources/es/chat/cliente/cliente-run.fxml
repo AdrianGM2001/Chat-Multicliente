@@ -16,85 +16,68 @@
         <Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
     </padding>
    <VBox spacing="10.0">
-      <children>
-         <HBox alignment="CENTER_LEFT" spacing="10.0">
-            <children>
-               <TextField fx:id="aliasIntroducido" focusTraversable="false" opacity="0.9" promptText="Introduce tu alias...">
-                  <font>
-                     <Font size="14.0" />
-                  </font>
-               </TextField>
-                <Button fx:id="botConexion" onAction="#onConectarClick" style="-fx-background-color: #969bb9;" text="Conectar" textFill="WHITE">
-                  <font>
-                     <Font size="14.0" />
-                  </font>
-               </Button>
-            </children>
-         </HBox>
-         <HBox alignment="CENTER_LEFT" spacing="10.0">
-            <children>
-               <Circle fx:id="estado" fill="RED" radius="5.0" stroke="BLACK" strokeType="INSIDE" />
-               <Label fx:id="mensajeEstado" text="Desconectado" textFill="RED">
-                  <font>
-                     <Font size="14.0" />
-                  </font>
-               </Label>
-            </children>
-            <VBox.margin>
-               <Insets />
-            </VBox.margin>
-         </HBox>
-      </children>
+      <HBox alignment="CENTER_LEFT" spacing="10.0">
+         <TextField fx:id="aliasIntroducido" focusTraversable="false" opacity="0.9"
+                    promptText="Introduce tu alias...">
+            <font>
+               <Font size="14.0"/>
+            </font>
+         </TextField>
+         <Button fx:id="botConexion" onAction="#onConectarClick" style="-fx-background-color: #969bb9;"
+                 text="Conectar" textFill="WHITE">
+            <font>
+               <Font size="14.0"/>
+            </font>
+         </Button>
+      </HBox>
+      <HBox alignment="CENTER_LEFT" spacing="10.0">
+         <VBox.margin>
+            <Insets/>
+         </VBox.margin>
+         <Circle fx:id="estado" fill="RED" radius="5.0" stroke="BLACK" strokeType="INSIDE"/>
+         <Label fx:id="mensajeEstado" text="Desconectado" textFill="RED">
+            <font>
+               <Font size="14.0"/>
+            </font>
+         </Label>
+      </HBox>
    </VBox>
    <HBox fx:id="chat" alignment="CENTER_LEFT" spacing="10.0">
-      <children>
-         <VBox prefHeight="334.0" prefWidth="463.0" spacing="10.0">
-            <children>
-               <HBox alignment="CENTER_LEFT" spacing="10.0">
-                  <children>
-                     <Label fx:id="labelChatActual" text="Chat" textFill="WHITE">
-                        <font>
-                           <Font size="14.0" />
-                        </font>
-                     </Label>
-                     <Button fx:id="botGeneral" onAction="#onGeneralClick" style="-fx-background-color: #969bb9;" text="Chat general" textFill="WHITE">
-                        <font>
-                           <Font size="14.0" />
-                        </font>
-                     </Button>
-                  </children>
-               </HBox>
-               <TextArea fx:id="mensajes" editable="false" focusTraversable="false" opacity="0.9" prefHeight="329.0" prefWidth="479.0">
-                  <font>
-                     <Font size="14.0" />
-                  </font>
-               </TextArea>
-               <HBox spacing="10.0">
-                  <children>
-                     <TextField fx:id="mensajeIntroducido" opacity="0.9" prefHeight="29.0" prefWidth="396.0">
-                        <font>
-                           <Font size="14.0" />
-                        </font>
-                     </TextField>
-                     <Button fx:id="botEnviar" mnemonicParsing="false" onAction="#onEnviarClick" style="-fx-background-color: #969bb9;" text="Enviar" textFill="WHITE">
-                        <font>
-                           <Font size="14.0" />
-                        </font>
-                     </Button>
-                  </children>
-               </HBox>
-            </children>
-         </VBox>
-         <VBox spacing="10.0">
-            <children>
-               <Label fx:id="labelListaUsuarios" prefHeight="108.0" prefWidth="128.0" text="Usuarios conectados" textFill="WHITE">
-                  <font>
-                     <Font size="14.0" />
-                  </font>
-               </Label>
-               <ListView fx:id="listaUsuarios" focusTraversable="false" opacity="0.9" prefWidth="128.0" />
-            </children>
-         </VBox>
-      </children>
+      <VBox prefHeight="334.0" prefWidth="463.0" spacing="10.0">
+         <HBox alignment="CENTER_LEFT" spacing="10.0">
+            <Label fx:id="labelChatActual" text="Chat" textFill="WHITE">
+               <font>
+                  <Font size="14.0"/>
+               </font>
+            </Label>
+         </HBox>
+         <TextArea fx:id="mensajes" editable="false" focusTraversable="false" opacity="0.9" prefHeight="329.0"
+                   prefWidth="479.0">
+            <font>
+               <Font size="14.0"/>
+            </font>
+         </TextArea>
+         <HBox spacing="10.0">
+            <TextField fx:id="mensajeIntroducido" opacity="0.9" prefHeight="29.0" prefWidth="396.0">
+               <font>
+                  <Font size="14.0"/>
+               </font>
+            </TextField>
+            <Button mnemonicParsing="false" onAction="#onEnviarClick" style="-fx-background-color: #969bb9;"
+                    text="Enviar" textFill="WHITE">
+               <font>
+                  <Font size="14.0"/>
+               </font>
+            </Button>
+         </HBox>
+      </VBox>
+      <VBox spacing="10.0">
+         <Label prefHeight="0.0" prefWidth="128.0" text="Lista de chats" textFill="WHITE">
+            <font>
+               <Font size="14.0"/>
+            </font>
+         </Label>
+         <ListView fx:id="chatsListView" focusTraversable="false" opacity="0.9" prefWidth="128.0"/>
+      </VBox>
    </HBox>
 </VBox>
