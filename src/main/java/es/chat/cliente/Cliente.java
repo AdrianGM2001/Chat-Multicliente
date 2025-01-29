@@ -29,7 +29,10 @@ public class Cliente extends Application {
 
         // Cerrar hilo al cerrar la ventana
         stage.setOnCloseRequest(e -> {
-            hiloEscucha.interrupt();
+            if (hiloEscucha != null) {
+                hiloEscucha.interrupt();
+            }
+
             System.exit(0);
         });
     }
