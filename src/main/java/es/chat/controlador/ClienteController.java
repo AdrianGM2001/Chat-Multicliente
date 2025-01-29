@@ -6,7 +6,6 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
 
 import java.io.DataInputStream;
@@ -15,7 +14,9 @@ import java.io.IOException;
 import java.net.Socket;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.ResourceBundle;
 
 import es.chat.modelo.comando.CliCmd;
@@ -33,7 +34,15 @@ import es.chat.modelo.comando.ServCmd;
 public class ClienteController implements Initializable {
     private Socket socketCliente;
     private DataOutputStream salida;
-    private String aliasReceptorPrivado;
+    private Map<String, String> chats;
+    private String aliasChatActual;
+    /**
+     * Indica si se puede cambiar de chat. Esto es necesario ya que el servidor envía como respuesta a un mensaje privado
+     * el alias del emisor y el mensaje enviado, por lo que se debe evitar cambiar de chat tras el envío de un mensaje y no 
+     * haber recibido la respuesta del servidor, ya que de esta manera se asegura que se muestre en el chat desde el que ha 
+     * sido enviado.
+     */
+    private boolean puedeCambiarChat = true;
 
     @FXML
     private TextField aliasIntroducido;
@@ -46,6 +55,12 @@ public class ClienteController implements Initializable {
 
     @FXML
     private Button botConexion;
+
+    @FXML
+    private Label labelChatActual;
+
+    @FXML
+    private Button botGeneral;
 
     @FXML
     private ListView<String> listaUsuarios;
@@ -93,12 +108,12 @@ public class ClienteController implements Initializable {
     private void onConectarClick() {
         iniciarConexion();
 
-        try {
-            if (socketCliente == null || socketCliente.isClosed()) {
-                System.out.println("No hay conexión con el servidor.");
-                return;
-            }
+        if (socketCliente == null || socketCliente.isClosed()) {
+            System.out.println("No hay conexión con el servidor.");
+            return;
+        }
 
+        try {
             salida.writeUTF(String.format("%s %s", CliCmd.CON, aliasIntroducido.getText()));
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
@@ -114,7 +129,7 @@ public class ClienteController implements Initializable {
     }
 
     /**
-     * Cambia el estado de la conexión y muestra un mensaje de éxito en la interfaz gráfica.
+     * Cambia el estado de la conexión y muestra un mensaje de éxito en la interfaz gráfica. Inicializa la lista de chats y el chat actual.
      * @param mensaje Mensaje a mostrar en la interfaz gráfica.
      */
     public void recibirOK(String mensaje) {
@@ -125,6 +140,12 @@ public class ClienteController implements Initializable {
         }
 
         cambiarEstado(ServCmd.OK, mensaje);
+        chats = new HashMap<>();
+        chats.put("_General", "");
+        aliasChatActual = "_General";
+        labelChatActual.setText("Chat general");
+        botGeneral.setVisible(false);
+        puedeCambiarChat = true;
     }
 
     /**
@@ -152,20 +173,33 @@ public class ClienteController implements Initializable {
 
     /**
      * Recibe una lista de usuarios separados por comas y los muestra en la lista de usuarios.
+     * Inicializa la lista de chats con los usuarios y un mensaje vacío.
      * @param listaSeparadaPorComas Lista de usuarios separados por comas.
      */
     public void recibirUsuarios(String listaSeparadaPorComas) {
         List<String> lista = Arrays.asList(listaSeparadaPorComas.split(","));
         listaUsuarios.getItems().clear();
         listaUsuarios.getItems().addAll(lista);
+        listaUsuarios.getItems().forEach(usuario -> chats.put(usuario, ""));
     }
 
     /**
-     * Añade un nuevo usuario a la lista de usuarios.
+     * Añade un nuevo usuario a la lista de usuarios. Si el usuario ya estuvo conectado, añade un mensaje de reconexión al chat.
      * @param usuario Usuario a añadir a la lista de usuarios.
      */
     public void addNuevoUsuario(String usuario) {
         listaUsuarios.getItems().add(usuario);
+
+        if (!chats.containsKey(usuario)) {
+            chats.put(usuario, "");
+            return;
+        }
+
+        chats.put(usuario, chats.get(usuario) + String.format("%s se ha reconectado.%n", usuario));
+
+        if (aliasChatActual.equals(usuario)) {
+            mensajes.setText(chats.get(usuario));
+        }
     }
 
     /**
@@ -174,6 +208,12 @@ public class ClienteController implements Initializable {
      */
     public void deleteUsuario(String usuario) {
         listaUsuarios.getItems().remove(usuario);
+
+        chats.put(usuario, chats.get(usuario) + String.format("%s se ha desconectado.%n", usuario));
+
+        if (aliasChatActual.equals(usuario)) {
+            mensajes.setText(chats.get(usuario));
+        }
     }
 
     /**
@@ -186,7 +226,6 @@ public class ClienteController implements Initializable {
             Cliente.hiloEscucha.interrupt();
             socketCliente.close();
             mensajes.clear();
-            iniciarConexion();
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
@@ -199,12 +238,35 @@ public class ClienteController implements Initializable {
      */
     @FXML
     private void onEnviarClick() {
+        String mensaje;
+        if (aliasChatActual.equals("_General")) {
+            mensaje = String.format("%s %s", CliCmd.MSG, mensajeIntroducido.getText());
+        } else {
+            mensaje = String.format("%s %s %s", CliCmd.PRV, aliasChatActual, mensajeIntroducido.getText());
+            puedeCambiarChat = false;
+        }
+
         try {
-            salida.writeUTF(String.format("%s %s", CliCmd.MSG, mensajeIntroducido.getText()));
-            mensajeIntroducido.setText("");
+            salida.writeUTF(mensaje);
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
+        mensajeIntroducido.setText("");
+    }
+
+    /**
+     * Muestra el chat general al hacer click en el botón de chat general. Si no se puede cambiar de chat, no hace nada.
+     */
+    @FXML
+    private void onGeneralClick() {
+        if (!puedeCambiarChat) {
+            return;
+        }
+
+        aliasChatActual = "_General";
+        labelChatActual.setText("Chat general");
+        mensajes.setText(chats.get(aliasChatActual));
+        botGeneral.setVisible(false);
     }
 
     /**
@@ -216,7 +278,12 @@ public class ClienteController implements Initializable {
         if (alias.equals(aliasIntroducido.getText())) {
             alias = "Yo";
         }
-        mensajes.appendText(String.format("%s: %s%n", alias, mensaje));
+
+        chats.put("_General", chats.get("_General") + String.format("%s: %s%n", alias, mensaje));
+
+        if (aliasChatActual.equals("_General")) {
+            mensajes.setText(chats.get("_General"));
+        }
     }
 
     /**
@@ -225,50 +292,32 @@ public class ClienteController implements Initializable {
      * @param mensaje Mensaje recibido.
      */
     public void recibirPrivado(String alias, String mensaje) {
-        boolean enviado = alias.equals(aliasIntroducido.getText());
-        mensajes.appendText(String.format("[PRIVADO] %s %s: %s%n", 
-            enviado ? "Enviado a" : "Recibido de", 
-            enviado ? aliasReceptorPrivado : alias, 
-            mensaje));
-    }
-
-    /**
-     * Muestra el menú para enviar un mensaje privado a un usuario. Si el alias es el mismo que el introducido, no se muestra el menú.
-     * @param alias Alias del usuario al que se quiere enviar un mensaje privado.
-     */
-    private void onUsuarioClick(String alias) {
-        if (alias == null || alias.equals(aliasIntroducido.getText())) {
+        if (alias.equals(aliasIntroducido.getText())) {
+            chats.put(aliasChatActual, chats.get(aliasChatActual) + String.format("Yo: %s%n", mensaje));
+            puedeCambiarChat = true;
+            mensajes.setText(chats.get(aliasChatActual));
             return;
         }
 
-        aliasReceptorPrivado = alias;
+        chats.put(alias, chats.get(alias) + String.format("%s: %s%n", alias, mensaje));
 
-        TextField mensaje = new TextField();
-        mensaje.setPromptText("Escribe tu mensaje...");
+        if (aliasChatActual.equals(alias)) {
+            mensajes.setText(chats.get(alias));
+        }
+    }
 
-        VBox contenido = new VBox();
-        contenido.setSpacing(10);
-        contenido.getChildren().add(mensaje);
+    /**
+     * Muestra el chat privado con un usuario al hacer click en la lista de usuarios.
+     * @param alias Alias del usuario al que se quiere enviar un mensaje privado.
+     */
+    private void onUsuarioClick(String alias) {
+        if (alias == null || alias.equals(aliasIntroducido.getText()) || !puedeCambiarChat) {
+            return;
+        }
 
-        ButtonType enviar = new ButtonType("Enviar");
-        ButtonType cancelar = new ButtonType("Cancelar");
-
-        Alert alert = new Alert(Alert.AlertType.NONE);
-        alert.setTitle(String.format("Chat privado con %s", alias));
-        alert.getButtonTypes().addAll(enviar, cancelar);
-        alert.getDialogPane().setContent(contenido);
-        alert.getDialogPane().setStyle("-fx-background-color: #00447c;");
-        alert.getButtonTypes().forEach(bt -> alert.getDialogPane().lookupButton(bt).setStyle("-fx-background-color: #969bb9; -fx-text-fill: white;"));
-        alert.showAndWait().ifPresent(bt -> {
-            if (bt == enviar && !mensaje.getText().isBlank()) {
-                try {
-                    salida.writeUTF(String.format("%s %s %s", CliCmd.PRV, alias, mensaje.getText()));
-                } catch (IOException e) {
-                    System.out.println("IOException: " + e.getMessage());
-                }
-            } else {
-                alert.close();
-            }
-        });
+        aliasChatActual = alias;
+        labelChatActual.setText(String.format("Chat privado con %s", alias));
+        mensajes.setText(chats.get(aliasChatActual));
+        botGeneral.setVisible(true);
     }
 }
