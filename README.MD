@@ -25,7 +25,9 @@ Esta es una aplicación cliente-servidor en la que el servidor permanece a la es
     <img src="img/chat1.png" alt="Imagen de inicio">
     <img src="img/chat2.png" alt="Sesión iniciada">
     <img src="img/chat3.png" alt="Mensajes">
-    <img src="img/chat4.png" alt="Mensaje privado">
-    <img src="img/chat5.png" alt="Otro cliente con el mensaje privado">
-    <img src="img/chat6.png" alt="Consola del servidor">
+    <img src="img/chat4.png" alt="Chat privado">
+    <img src="img/chat5.png" alt="Enviar un mensaje privado">
+    <img src="img/chat6.png" alt="Recibir un mensaje privado">
+    <img src="img/chat7.png" alt="Abrir un mensaje privado">
+    <img src="img/chat8.png" alt="Consola del servidor">
 </p>
