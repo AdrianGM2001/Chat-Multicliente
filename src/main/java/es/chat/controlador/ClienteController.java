@@ -239,6 +239,11 @@ public class ClienteController implements Initializable {
     @FXML
     private void onEnviarClick() {
         String mensaje;
+
+        if (mensajeIntroducido.getText().isBlank()) {
+            return;
+        }
+
         if (aliasChatActual.equals("_General")) {
             mensaje = String.format("%s %s", CliCmd.MSG, mensajeIntroducido.getText());
         } else {
