@@ -66,7 +66,6 @@ public class ClienteController implements Initializable {
     public void initialize(URL url, ResourceBundle resourceBundle) {
         chat.setVisible(false);
         listaUsuarios.setOnMouseClicked(event -> onUsuarioClick(listaUsuarios.getSelectionModel().getSelectedItem()));
-        iniciar();
     }
 
     /**
@@ -75,7 +74,7 @@ public class ClienteController implements Initializable {
      * @see EscuchaHilo
      * @see Cliente
      */
-    private void iniciar() {
+    private void iniciarConexion() {
         try {
             socketCliente = new Socket("localhost", 4444);
             DataInputStream entrada = new DataInputStream(socketCliente.getInputStream());
@@ -92,7 +91,14 @@ public class ClienteController implements Initializable {
      */
     @FXML
     private void onConectarClick() {
+        iniciarConexion();
+
         try {
+            if (socketCliente == null || socketCliente.isClosed()) {
+                System.out.println("No hay conexión con el servidor.");
+                return;
+            }
+
             salida.writeUTF(String.format("%s %s", CliCmd.CON, aliasIntroducido.getText()));
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
@@ -180,7 +186,7 @@ public class ClienteController implements Initializable {
             Cliente.hiloEscucha.interrupt();
             socketCliente.close();
             mensajes.clear();
-            iniciar();
+            iniciarConexion();
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
