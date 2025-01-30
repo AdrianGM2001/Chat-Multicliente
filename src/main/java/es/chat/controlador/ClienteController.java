@@ -192,6 +192,7 @@ public class ClienteController implements Initializable {
                 .orElse(new Chat(alias));
 
         nuevoChat.addMensaje(String.format("%s se ha conectado.", alias));
+        chats.add(nuevoChat);
         chatsListView.getItems().add(nuevoChat);
     }
 
