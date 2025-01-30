@@ -44,12 +44,15 @@ public class Validar {
      * @return {@code true} si es correcto, {@code false} en caso contrario
      */
     public static boolean parametros(String comando) {
+        if (comando.length() < 3) {
+            return false;
+        }
+        
         CliCmd c = CliCmd.valueOf(comando.substring(0, 3));
         String[] comandoSplit = comando.split(" ", 2);
 
         return switch (c) {
-            case CON -> comandoSplit.length == 2 && alias(comandoSplit[1]);
-            case MSG -> comandoSplit.length == 2;
+            case CON, MSG -> comandoSplit.length == 2;
             case PRV -> {
                 String[] aliasMensaje = comandoSplit[1].split(" ", 2);
                 yield aliasMensaje.length == 2 && alias(aliasMensaje[0]);

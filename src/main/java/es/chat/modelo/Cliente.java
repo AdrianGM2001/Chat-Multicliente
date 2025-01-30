@@ -5,6 +5,7 @@ import es.chat.servidor.Worker;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.Socket;
 
 /**
@@ -43,5 +44,20 @@ public class Cliente {
 
     public DataInputStream getEntrada() {
         return entrada;
+    }
+
+    /**
+     * Envía una respuesta al cliente por parte del servidor, si se produce un error se muestra por consola.
+     * @param respuesta Respuesta a enviar
+     * @return {@code true} si se envía correctamente, {@code false} en caso contrario
+     */
+    public boolean enviarRespuesta(String respuesta) {
+        try {
+            getSalida().writeUTF(respuesta);
+            return true;
+        } catch (IOException e) {
+            System.err.printf("ERROR: %s%n%s%n", respuesta, e.getMessage());
+            return false;
+        }
     }
 }

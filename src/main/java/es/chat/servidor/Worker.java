@@ -40,7 +40,9 @@ public class Worker implements Runnable {
             while (comando != CliCmd.EXI) {
                 String comandoRecibido = cliente.getEntrada().readUTF();
 
-                if (validarComando(comandoRecibido)) continue;
+                if (!validarComando(comandoRecibido)) {
+                    continue;
+                }
 
                 String[] splitComandoParametros = comandoRecibido.split(" ", 2);
                 comando = CliCmd.valueOf(splitComandoParametros[0]);
@@ -59,9 +61,8 @@ public class Worker implements Runnable {
      * Ejecuta el comando recibido por el cliente.
      * @param comando Comando recibido
      * @param parametros Parámetros del comando
-     * @throws IOException Si hay un error al enviar mensajes
      */
-    private void ejecutarComando(CliCmd comando, String parametros) throws IOException {
+    private void ejecutarComando(CliCmd comando, String parametros) {
         switch (comando) {
             case PRV -> enviarMensajePrivado(parametros);
             case EXI -> desconectar();
@@ -72,68 +73,65 @@ public class Worker implements Runnable {
     }
 
     /**
-     * Valida el comando recibido por el cliente.
+     * Valida el comando recibido por el cliente. Si el comando no es válido, muestra un mensaje de error.
      * @param comandoRecibido Comando recibido
-     * @return {@code true} si el comando no es válido, {@code false} en caso contrario
-     * @throws IOException Si hay un error al enviar mensajes
+     * @return {@code true} si el comando es válido, {@code false} en caso contrario
      */
-    private boolean validarComando(String comandoRecibido) throws IOException {
-        if (!Validar.comandoParametros(comandoRecibido)) {
-            System.err.printf("COMANDO NO VÁLIDO. %s: %s%n",
-                cliente.getAlias() == null ? "Nueva conexión" : cliente.getAlias(), comandoRecibido);
-
-            if (cliente.getAlias() == null) {
-                cliente.getSalida().writeUTF(String.format("%s %s", ServCmd.NOK, "Alias no válido"));
-            }
-
+    private boolean validarComando(String comandoRecibido) {
+        if (Validar.comandoParametros(comandoRecibido)) {
             return true;
         }
+        
+        System.err.printf("COMANDO NO VÁLIDO. %s: %s%n",
+            cliente.getAlias() == null ? "Nueva conexión" : cliente.getAlias(), comandoRecibido);
+
         return false;
     }
 
     /**
-     * Inicia la sesión del cliente con el alias proporcionado. Si el alias ya está en uso,
-     * envía un mensaje de error al cliente. En caso contrario, añade al cliente a la lista
-     * de clientes conectados y envía un mensaje de confirmación a todos los clientes conectados.
+     * Inicia la sesión del cliente con el alias especificado. Si el alias ya está en uso o no es válido,
+     * no se inicia la sesión y se envía un mensaje de error al cliente. En caso contrario, se inicia la sesión
+     * y se envía un mensaje de confirmación al cliente y a todos los clientes conectados.
      * @param alias Alias del cliente
-     * @throws IOException Si hay un error al enviar mensajes
      */
-    private void iniciarSesion(String alias) throws IOException {
+    private void iniciarSesion(String alias) {
         if (cliente.getAlias() != null) {
-            cliente.getSalida().writeUTF(String.format("%s %s", ServCmd.NOK, "Ya estás conectado"));
+            cliente.enviarRespuesta(String.format("%s %s", ServCmd.NOK, "Ya estás conectado"));
+            System.err.printf("Cliente ya conectado: %s%n", cliente.getAlias());
+            return;
+        }
+
+        if (!Validar.alias(alias)) {
+            cliente.enviarRespuesta(String.format("%s %s", ServCmd.NOK, "Alias no válido"));
+            System.err.printf("Alias no válido: %s%n", alias);
             return;
         }
 
         synchronized (lock) {
             if (clientes.stream().anyMatch(c -> c.getAlias().equals(alias))) {
-                cliente.getSalida().writeUTF(String.format("%s %s", ServCmd.NOK, "Alias ya en uso"));
+                cliente.enviarRespuesta(String.format("%s %s", ServCmd.NOK, "Alias ya en uso"));
+                System.err.printf("Alias en uso: %s%n", alias);
                 return;
             }
-    
+
             cliente.setAlias(alias);
+
+            clientes.forEach(c -> c.enviarRespuesta(String.format("%s %s", ServCmd.CON, cliente.getAlias())));
             clientes.add(cliente);
-            cliente.getSalida().writeUTF(String.format("%s ¡Conectado!", ServCmd.OK));
-    
-            for (Cliente c : clientes) {
-                if (!c.getAlias().equals(cliente.getAlias())) {
-                    c.getSalida().writeUTF(String.format("%s %s", ServCmd.CON,  cliente.getAlias()));
-                }
-            }
         }
 
-        System.out.printf("Cliente conectado: %s%n", cliente.getAlias());
+        if (cliente.enviarRespuesta(String.format("%s ¡Conectado!", ServCmd.OK))) {
+            System.out.printf("Cliente conectado: %s%n", cliente.getAlias());
+        }
     }
 
     /**
      * Envía un mensaje general a todos los clientes conectados.
      * @param mensaje Mensaje a enviar
-     * @throws IOException Si hay un error al enviar mensajes
      */
-    private void enviarMensajeGeneral(String mensaje) throws IOException {
+    private void enviarMensajeGeneral(String mensaje) {
         synchronized (lock) {
-            for (Cliente c : clientes) {
-                c.getSalida().writeUTF(String.format("%s %s %s", ServCmd.CHT, cliente.getAlias(), mensaje));
-            }
+            clientes.forEach(c -> c.enviarRespuesta(String.format("%s %s %s", ServCmd.CHT, cliente.getAlias(), mensaje)));
         }
 
         System.out.printf("Mensaje de %s: %s%n", cliente.getAlias(), mensaje);
@@ -141,15 +139,17 @@ public class Worker implements Runnable {
 
     /**
      * Envía la lista de usuarios conectados al cliente.
-     * @throws IOException Si hay un error al enviar mensajes
      */
-    private void pedirListaUsuarios() throws IOException {
+    private void pedirListaUsuarios() {
+        String listaCSV;
+
         synchronized (lock) {
-            String listaCSV = clientes.stream().map(Cliente::getAlias).reduce((a, b) -> a + "," + b).orElse("");
-            cliente.getSalida().writeUTF(String.format("%s %s", ServCmd.LST, listaCSV));
+            listaCSV = String.join(",", clientes.stream().map(Cliente::getAlias).toList());
         }
 
-        System.out.printf("Lista de usuarios enviada a %s%n", cliente.getAlias());
+        if (cliente.enviarRespuesta(String.format("%s %s", ServCmd.LST, listaCSV))) {
+            System.out.printf("Lista de usuarios enviada a %s%n", cliente.getAlias());
+        }
     }
 
     /**
@@ -158,19 +158,10 @@ public class Worker implements Runnable {
     private void desconectar() {
         synchronized (lock) {
             clientes.remove(cliente);
-
-            for (Cliente c : clientes) {
-                try {
-                    c.getSalida().writeUTF(String.format("%s %s", ServCmd.EXI, cliente.getAlias()));
-                } catch (IOException e) {
-                    System.err.printf("Error al enviar mensaje a %s: %s%n", c.getAlias(), e.getMessage());
-                }
-            }
+            clientes.forEach(c -> c.enviarRespuesta(String.format("%s %s", ServCmd.EXI, cliente.getAlias())));
         }
 
         System.out.printf("Cliente desconectado: %s%n", cliente.getAlias());
-
-        cliente.setAlias(null);
     }
 
     /**
@@ -178,9 +169,8 @@ public class Worker implements Runnable {
      * o es el propio cliente, no se envía el mensaje. En caso contrario, se envía el mensaje
      * al destinatario y al cliente que lo envió.
      * @param parametros Destinatario y mensaje
-     * @throws IOException Si hay un error al enviar mensajes
      */
-    private void enviarMensajePrivado(String parametros) throws IOException {
+    private void enviarMensajePrivado(String parametros) {
         String[] splitDestinatarioMensaje = parametros.split(" ", 2);
         String aliasDestinatario = splitDestinatarioMensaje[0];
         String mensaje = splitDestinatarioMensaje[1];
@@ -191,11 +181,13 @@ public class Worker implements Runnable {
             destinatario = clientes.stream().filter(c -> c.getAlias().equals(aliasDestinatario)).findFirst();
         }
 
-        if (destinatario.isPresent() && !cliente.equals(destinatario.get())) {
-            destinatario.get().getSalida().writeUTF(String.format("%s %s %s", ServCmd.PRV, cliente.getAlias(), mensaje));
-            cliente.getSalida().writeUTF(String.format("%s %s %s", ServCmd.PRV, cliente.getAlias(), mensaje));
+        if (destinatario.isEmpty() || cliente.equals(destinatario.get())) {
+            return;
         }
 
+        destinatario.get().enviarRespuesta(String.format("%s %s %s", ServCmd.PRV, cliente.getAlias(), mensaje));
+        cliente.enviarRespuesta(String.format("%s %s %s", ServCmd.PRV, cliente.getAlias(), mensaje));
+        
         System.out.printf("Mensaje privado de %s a %s: %s%n", cliente.getAlias(), aliasDestinatario, mensaje);
     }
 }
