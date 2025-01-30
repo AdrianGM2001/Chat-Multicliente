@@ -80,39 +80,32 @@ public class ClienteController implements Initializable {
     }
 
     /**
+     * Inicia la conexión con el servidor y envía un mensaje al servidor para conectarse con un alias.
+     */
+    @FXML
+    private void onConectarClick() {
+        if (iniciarConexion()) {
+            peticionAlServidor(String.format("%s %s", CliCmd.CON, aliasIntroducido.getText()));
+        }
+    }
+
+    /**
      * Inicia la conexión con el servidor y el hilo de escucha de mensajes del servidor.
      * Muestra un mensaje de error si no se puede conectar con el servidor.
      * @see EscuchaHilo
      * @see Cliente
      */
-    private void iniciarConexion() {
+    private boolean iniciarConexion() {
         try {
             socketCliente = new Socket("localhost", 4444);
             DataInputStream entrada = new DataInputStream(socketCliente.getInputStream());
             salida = new DataOutputStream(socketCliente.getOutputStream());
             Cliente.hiloEscucha = new Thread(new EscuchaHilo(entrada, this));
             Cliente.hiloEscucha.start();
+            return true;
         } catch (IOException e) {
             mensajeEstado.setText("Error al conectar con el servidor");
-        }
-    }
-
-    /**
-     * Envía un mensaje al servidor para conectarse con un alias.
-     */
-    @FXML
-    private void onConectarClick() {
-        iniciarConexion();
-
-        if (socketCliente == null || socketCliente.isClosed()) {
-            System.out.println("No hay conexión con el servidor.");
-            return;
-        }
-
-        try {
-            salida.writeUTF(String.format("%s %s", CliCmd.CON, aliasIntroducido.getText()));
-        } catch (IOException e) {
-            System.out.println("IOException: " + e.getMessage());
+            return false;
         }
     }
 
@@ -129,18 +122,16 @@ public class ClienteController implements Initializable {
      * @param mensaje Mensaje a mostrar en la interfaz gráfica.
      */
     public void recibirOK(String mensaje) {
+        iniciarInterfaz();
         cambiarEstado(ServCmd.OK, mensaje);
+        peticionAlServidor(CliCmd.LUS.name());
+    }
 
-        try {
-            salida.writeUTF(CliCmd.LUS.name());
-        } catch (IOException e) {
-            System.out.println("IOException: " + e.getMessage());
-        }
-
-        // Inicializar lista de chats
+    private void iniciarInterfaz() {
         chatActual = new Chat("[General]");
         chats = new ArrayList<>();
         chats.add(chatActual);
+        chatsListView.getItems().setAll(chats);
         labelChatActual.setText("Chat general");
         puedeCambiarChat = true;
     }
@@ -178,7 +169,10 @@ public class ClienteController implements Initializable {
                 .filter(c -> !c.equals(aliasIntroducido.getText()))
                 .map(Chat::new)
                 .forEach(chats::add);
-        chatsListView.getItems().addAll(chats);
+        chatsListView.getItems().addAll(chats.stream().skip(1).toList());
+        chats.stream().skip(1).forEach(c -> chats.getFirst().addMensaje(String.format("%s se ha conectado.", c.getAlias())));
+        chats.stream().skip(1).forEach(c -> c.addMensaje(String.format("%s se ha conectado.", c.getAlias())));
+        mensajes.setText(chats.getFirst().getMensajes());
     }
 
     /**
@@ -192,8 +186,13 @@ public class ClienteController implements Initializable {
                 .orElse(new Chat(alias));
 
         nuevoChat.addMensaje(String.format("%s se ha conectado.", alias));
+        chats.getFirst().addMensaje(String.format("%s se ha conectado.", alias));
         chats.add(nuevoChat);
         chatsListView.getItems().add(nuevoChat);
+
+        if (chatActual.equals(chats.getFirst())) {
+            mensajes.setText(chatActual.getMensajes());
+        }
     }
 
     /**
@@ -202,17 +201,24 @@ public class ClienteController implements Initializable {
      * @param alias Usuario a eliminar del ListView de usuarios.
      */
     public void deleteUsuario(String alias) {
-        Chat aEliminar = chats.stream()
+        Chat eliminarChat = chats.stream()
             .filter(c -> c.getAlias().equals(alias))
             .findFirst()
             .orElseThrow();
 
-        chatsListView.getItems().remove(aEliminar);
+        chatsListView.getItems().remove(eliminarChat);
 
-        aEliminar.addMensaje(String.format("%s se ha desconectado.", alias));
+        // El chat se mantiene en la lista de chats (pero no en el ListView), pero se añade un mensaje de desconexión
+        eliminarChat.addMensaje(String.format("%s se ha desconectado.", alias));
+        chats.getFirst().addMensaje(String.format("%s se ha desconectado.", alias));
 
-        if (chatActual.equals(aEliminar)) {
+        // Si el chat actual es el que se ha eliminado, se cambia al chat general
+        if (chatActual.equals(eliminarChat)) {
             chatActual = chats.getFirst();
+            mensajes.setText(chatActual.getMensajes());
+        }
+
+        if (chatActual.equals(chats.getFirst())) {
             mensajes.setText(chatActual.getMensajes());
         }
     }
@@ -223,14 +229,11 @@ public class ClienteController implements Initializable {
      */
     @FXML
     private void onDesconectarClick() {
+        peticionAlServidor(CliCmd.EXI.name());
+
         try {
-            salida.writeUTF(CliCmd.EXI.name());
             Cliente.hiloEscucha.interrupt();
             socketCliente.close();
-            mensajes.clear();
-            chats.clear();
-            chatsListView.getItems().clear();
-            chatActual = null;
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
@@ -256,11 +259,7 @@ public class ClienteController implements Initializable {
             puedeCambiarChat = false;
         }
 
-        try {
-            salida.writeUTF(mensaje);
-        } catch (IOException e) {
-            System.out.println("IOException: " + e.getMessage());
-        }
+        peticionAlServidor(mensaje);
         mensajeIntroducido.setText("");
     }
 
@@ -271,14 +270,11 @@ public class ClienteController implements Initializable {
      */
     public void recibirGeneral(String alias, String mensaje) {
         Chat chatGeneral = chats.getFirst(); // El chat general siempre está en la primera posición
-        if (alias.equals(aliasIntroducido.getText())) {
-            alias = "Yo";
-        }
 
         chatGeneral.addMensaje(String.format("%s: %s", alias, mensaje));
         chatGeneral.incrementarMensajesNoLeidos();
 
-        if (chatActual.getAlias().equals("[General]")) {
+        if (chatActual.equals(chats.getFirst())) {
             mensajes.setText(chatActual.getMensajes());
             chatActual.resetMensajesNoLeidos();
         }
@@ -292,25 +288,25 @@ public class ClienteController implements Initializable {
      * @param mensaje Mensaje recibido.
      */
     public void recibirPrivado(String alias, String mensaje) {
-        Optional<Chat> aEscribir = chats.stream()
+        Optional<Chat> emisorChat = chats.stream()
                 .filter(u -> u.getAlias().equals(alias))
                 .findFirst();
 
-        Chat aEscribirEncontrado;
+        Chat emisorChatEncontrado;
 
-        if (aEscribir.isEmpty()) {
-            chatActual.addMensaje(String.format("Yo: %s", mensaje));
+        if (emisorChat.isEmpty()) {
+            chatActual.addMensaje(String.format("%s: %s", alias, mensaje));
             mensajes.setText(chatActual.getMensajes());
             puedeCambiarChat = true;
             return;
         }
 
-        aEscribirEncontrado = aEscribir.get();
+        emisorChatEncontrado = emisorChat.get();
 
-        aEscribirEncontrado.addMensaje(String.format("%s: %s", alias, mensaje));
-        aEscribirEncontrado.incrementarMensajesNoLeidos();
+        emisorChatEncontrado.addMensaje(String.format("%s: %s", alias, mensaje));
+        emisorChatEncontrado.incrementarMensajesNoLeidos();
 
-        if (aEscribirEncontrado.equals(chatActual)) {
+        if (emisorChatEncontrado.equals(chatActual)) {
             mensajes.setText(chatActual.getMensajes());
             chatActual.resetMensajesNoLeidos();
         }
@@ -329,7 +325,7 @@ public class ClienteController implements Initializable {
 
         chatActual = chatSeleccionado;
 
-        if (chatActual.getAlias().equals("[General]")) {
+        if (chatActual.equals(chats.getFirst())) {
             labelChatActual.setText("Chat general");
         } else {
             labelChatActual.setText(String.format("Chat privado con %s", chatActual.getAlias()));
@@ -338,5 +334,17 @@ public class ClienteController implements Initializable {
         chatActual.resetMensajesNoLeidos();
         chatsListView.refresh();
         mensajes.setText(chatActual.getMensajes());
+    }
+
+    /**
+     * Envía una petición al servidor. Si hay un error al enviar la petición, muestra un mensaje de error en la consola.
+     * @param peticion Petición a enviar al servidor.
+     */
+    private void peticionAlServidor(String peticion) {
+        try {
+            salida.writeUTF(peticion);
+        } catch (IOException e) {
+            System.err.printf("ERROR. %s%n%s%n", peticion, e.getMessage());
+        }
     }
 }
